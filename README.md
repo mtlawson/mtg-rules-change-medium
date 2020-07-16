@@ -35,5 +35,5 @@ This repository is open source. I make no claims for its quality, and in fact I 
 5. If you have issues with the environment after creation and want to start over, you can remove it with the following command
 
     ```bash
-    conda-env remove -n mtg_sim
+    conda env remove -n mtg_sim
     ```
