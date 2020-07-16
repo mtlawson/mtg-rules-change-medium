@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
-from plotnine import *
+# from plotnine import ggplot, aes, geom_density, geom_vline, theme_classic, xlim, 
+import plotnine as plt
 
 NUM_MATCHES_PER_ROUND = 85
 NUM_MATCHES_PER_ROUND_HUGE = 350
@@ -54,6 +55,7 @@ def simulate_match(
     gamma_scale: float
 ):
     """ Simulate the length of a MTG match """
+
     if is_blowout:
         match_length = gen_gamma_dist_sum(shape=gamma_shape, scale=gamma_scale)
     else:
@@ -72,6 +74,8 @@ def simulate_match_lengths_in_round(
         blowout_shape_parameter: float = 0,
         blowout_scale_parameter: float = 0,
 ):
+    """ Simulate match lengths for an entire tournament round """
+
     match_lengths = [simulate_match(average_minutes_per_game, 
                                     sd_minutes_per_game, 
                                     prob_of_three_games,
@@ -115,7 +119,9 @@ def find_prob_of_going_to_time(
     return sum(went_to_time) / len(went_to_time)
 
 
-if __name__ == '__main__':
+def main():
+    """ Run all simualtions and generate figures """
+
     np.random.seed(23)
 
     # Density plot for match lengths, new rules, no blowouts, 85 matches/round
@@ -126,19 +132,19 @@ if __name__ == '__main__':
     )
     match_lengths = pd.DataFrame({'Match length': match_lengths_from_one_round})
     (
-            ggplot(match_lengths, aes(x='Match length'))
-            + geom_density()
-            + geom_vline(xintercept=50, color='black', size=2)
-            + theme_classic()
-            + xlim([0, 55])
+            plt.ggplot(match_lengths, plt.aes(x='Match length'))
+            + plt.geom_density()
+            + plt.geom_vline(xintercept=50, color='black', size=2)
+            + plt.theme_classic()
+            + plt.xlim([0, 55])
     ).save(filename='figures/match_length_density_plot.png')
 
     # Plot go-to-time probability, new vs. old rules, no blowouts, 85 matches/round
     average_minutes_per_game_values = [12, 12.5, 13, 13.5, 14, 14.5, 15]
-    go_to_time_probs = []
+    go_to_time_probs_new = []
     go_to_time_probs_old = []
     for i in range(len(average_minutes_per_game_values)):
-        go_to_time_probs.append(
+        go_to_time_probs_new.append(
             find_prob_of_going_to_time(
                 num_rounds_to_simulate=10000,
                 num_matches_per_round=NUM_MATCHES_PER_ROUND,
@@ -155,13 +161,14 @@ if __name__ == '__main__':
                 prob_of_three_games=prob_of_three_games_old
             )
         )
+
     time_prob_data = pd.DataFrame({
         'Average minutes per game': np.concatenate([
             average_minutes_per_game_values,
             average_minutes_per_game_values
         ]),
         'P(Go to time)': np.concatenate([
-            go_to_time_probs,
+            go_to_time_probs_new,
             go_to_time_probs_old
         ]),
         'Rules': np.concatenate([
@@ -170,11 +177,11 @@ if __name__ == '__main__':
         ])
     })
     (
-        ggplot(time_prob_data, aes(x='Average minutes per game', y='P(Go to time)', color='Rules'))
-        + geom_line()
-        + geom_point()
-        + ylim([0, 1])
-        + theme_classic()
+        plt.ggplot(time_prob_data, plt.aes(x='Average minutes per game', y='P(Go to time)', color='Rules'))
+        + plt.geom_line()
+        + plt.geom_point()
+        + plt.ylim([0, 1])
+        + plt.theme_classic()
     ).save(filename='figures/go_to_time_prob_plot.png')
 
     # Density plot for match lengths, new rules, blowouts vs. no blowouts, 85 matches/round
@@ -194,18 +201,18 @@ if __name__ == '__main__':
         ])
     })
     (
-        ggplot(match_lengths_blowout, aes(x='Match length', color='Blowouts'))
-        + geom_density()
-        + geom_vline(xintercept=50, color='black', size=2)
-        + xlim([0, 55])
-        + theme_classic()
+        plt.ggplot(match_lengths_blowout, plt.aes(x='Match length', color='Blowouts'))
+        + plt.geom_density()
+        + plt.geom_vline(xintercept=50, color='black', size=2)
+        + plt.xlim([0, 55])
+        + plt.theme_classic()
     ).save(filename='figures/match_length_with_blowout_density_plot.png')
 
     # Plot go-to-time probability, new vs. old rules, blowouts vs. no blowouts, 85 matches/round
-    go_to_time_blowout_probs = []
+    go_to_time_blowout_probs_new = []
     go_to_time_blowout_probs_old = []
     for i in range(len(average_minutes_per_game_values)):
-        go_to_time_blowout_probs.append(
+        go_to_time_blowout_probs_new.append(
             find_prob_of_going_to_time(
                 num_rounds_to_simulate=10000,
                 num_matches_per_round=85,
@@ -236,9 +243,9 @@ if __name__ == '__main__':
             average_minutes_per_game_values
         ]),
         'P(Go to time)': np.concatenate([
-            go_to_time_probs,
+            go_to_time_probs_new,
             go_to_time_probs_old,
-            go_to_time_blowout_probs,
+            go_to_time_blowout_probs_new,
             go_to_time_blowout_probs_old
         ]),
         'Rules': np.concatenate([
@@ -249,11 +256,11 @@ if __name__ == '__main__':
         ])
     })
     (
-        ggplot(time_prob_blowout_data, aes(x='Average minutes per game', y='P(Go to time)', color='Rules'))
-        + geom_line()
-        + geom_point()
-        + ylim([0, 1])
-        + theme_classic()
+        plt.ggplot(time_prob_blowout_data, plt.aes(x='Average minutes per game', y='P(Go to time)', color='Rules'))
+        + plt.geom_line()
+        + plt.geom_point()
+        + plt.ylim([0, 1])
+        + plt.theme_classic()
     ).save(filename='figures/go_to_time_prob_with_blowouts_plot.png')
 
     # Plot go-to-time probability, old vs. new rules, no blowouts, 300 matches/round
@@ -293,9 +300,12 @@ if __name__ == '__main__':
         ])
     })
     (
-            ggplot(large_time_prob_data, aes(x='Average minutes per game', y='P(Go to time)', color='Rules'))
-            + geom_line()
-            + geom_point()
-            + ylim([0, 1])
-            + theme_classic()
+            plt.ggplot(large_time_prob_data, plt.aes(x='Average minutes per game', y='P(Go to time)', color='Rules'))
+            + plt.geom_line()
+            + plt.geom_point()
+            + plt.ylim([0, 1])
+            + plt.theme_classic()
     ).save(filename='figures/go_to_time_300_matches_prob_plot.png')
+
+if __name__ == '__main__':
+    main()
