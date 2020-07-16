@@ -83,41 +83,41 @@ def simulate_match_lengths_in_round(
     return match_lengths
 
 
-def does_round_go_to_time(match_lengths_in_round):
+def does_round_go_to_time(match_lengths_in_round: list):
     return sum(np.greater_equal(match_lengths_in_round, NUM_MINUTES_PER_ROUND)) > 0
 
 
+# def find_prob_of_going_to_time(
+#         num_rounds_to_simulate,
+#         num_matches_per_round,
+#         average_minutes_per_game,
+#         sd_minutes_per_game,
+#         prob_of_three_games=prob_of_three_games_new
+# ):
+#     went_to_time = []
+#     for i in range(num_rounds_to_simulate):
+#         went_to_time.append(
+#             does_round_go_to_time(
+#                 simulate_match_lengths_in_round(
+#                     num_matches_per_round=num_matches_per_round,
+#                     average_minutes_per_game=average_minutes_per_game,
+#                     sd_minutes_per_game=sd_minutes_per_game,
+#                     prob_of_three_games=prob_of_three_games
+#                 )
+#             )
+#         )
+#     return sum(went_to_time) / len(went_to_time)
+
+
 def find_prob_of_going_to_time(
-        num_rounds_to_simulate,
-        num_matches_per_round,
-        average_minutes_per_game,
-        sd_minutes_per_game,
-        prob_of_three_games=prob_of_three_games_new
-):
-    went_to_time = []
-    for i in range(num_rounds_to_simulate):
-        went_to_time.append(
-            does_round_go_to_time(
-                simulate_match_lengths_in_round(
-                    num_matches_per_round=num_matches_per_round,
-                    average_minutes_per_game=average_minutes_per_game,
-                    sd_minutes_per_game=sd_minutes_per_game,
-                    prob_of_three_games=prob_of_three_games
-                )
-            )
-        )
-    return sum(went_to_time) / len(went_to_time)
-
-
-def find_prob_of_going_to_time_with_blowouts(
-        num_rounds_to_simulate,
-        num_matches_per_round,
-        prob_of_blowout,
-        blowout_shape_parameter,
-        blowout_scale_parameter,
-        normal_average_minutes_per_game,
-        normal_sd_minutes_per_game,
-        prob_of_three_games=prob_of_three_games_new
+        num_rounds_to_simulate: int,
+        num_matches_per_round: int,
+        average_minutes_per_game: float,
+        sd_minutes_per_game: float,
+        prob_of_three_games=prob_of_three_games_new,
+        prob_of_blowout: float = 0,
+        blowout_shape_parameter: float = 0,
+        blowout_scale_parameter: float = 0
 ):
     went_to_time = []
     for i in range(num_rounds_to_simulate):
@@ -128,8 +128,8 @@ def find_prob_of_going_to_time_with_blowouts(
                     prob_of_blowout=prob_of_blowout,
                     blowout_shape_parameter=blowout_shape_parameter,
                     blowout_scale_parameter=blowout_scale_parameter,
-                    average_minutes_per_game=normal_average_minutes_per_game,
-                    sd_minutes_per_game=normal_sd_minutes_per_game,
+                    average_minutes_per_game=average_minutes_per_game,
+                    sd_minutes_per_game=sd_minutes_per_game,
                     prob_of_three_games=prob_of_three_games
                 )
             )
@@ -228,25 +228,25 @@ if __name__ == '__main__':
     go_to_time_blowout_probs_old = []
     for i in range(len(average_minutes_per_game_values)):
         go_to_time_blowout_probs.append(
-            find_prob_of_going_to_time_with_blowouts(
+            find_prob_of_going_to_time(
                 num_rounds_to_simulate=10000,
                 num_matches_per_round=85,
                 prob_of_blowout=CASE_2_BLOWOUT_PROB,
                 blowout_shape_parameter=CASE_2_LOW_SHAPE_PARAM,
                 blowout_scale_parameter=CASE_2_LOW_SCALE_PARAM,
-                normal_average_minutes_per_game=average_minutes_per_game_values[i],
-                normal_sd_minutes_per_game=CASE_2_HIGH_SD_MINUTES_PER_GAME
+                average_minutes_per_game=average_minutes_per_game_values[i],
+                sd_minutes_per_game=CASE_2_HIGH_SD_MINUTES_PER_GAME
             )
         )
         go_to_time_blowout_probs_old.append(
-            find_prob_of_going_to_time_with_blowouts(
+            find_prob_of_going_to_time(
                 num_rounds_to_simulate=10000,
                 num_matches_per_round=85,
                 prob_of_blowout=CASE_2_BLOWOUT_PROB,
                 blowout_shape_parameter=CASE_2_LOW_SHAPE_PARAM,
                 blowout_scale_parameter=CASE_2_LOW_SCALE_PARAM,
-                normal_average_minutes_per_game=average_minutes_per_game_values[i],
-                normal_sd_minutes_per_game=CASE_2_HIGH_SD_MINUTES_PER_GAME,
+                average_minutes_per_game=average_minutes_per_game_values[i],
+                sd_minutes_per_game=CASE_2_HIGH_SD_MINUTES_PER_GAME,
                 prob_of_three_games=prob_of_three_games_old
             )
         )
