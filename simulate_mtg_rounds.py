@@ -87,28 +87,6 @@ def does_round_go_to_time(match_lengths_in_round: list):
     return sum(np.greater_equal(match_lengths_in_round, NUM_MINUTES_PER_ROUND)) > 0
 
 
-# def find_prob_of_going_to_time(
-#         num_rounds_to_simulate,
-#         num_matches_per_round,
-#         average_minutes_per_game,
-#         sd_minutes_per_game,
-#         prob_of_three_games=prob_of_three_games_new
-# ):
-#     went_to_time = []
-#     for i in range(num_rounds_to_simulate):
-#         went_to_time.append(
-#             does_round_go_to_time(
-#                 simulate_match_lengths_in_round(
-#                     num_matches_per_round=num_matches_per_round,
-#                     average_minutes_per_game=average_minutes_per_game,
-#                     sd_minutes_per_game=sd_minutes_per_game,
-#                     prob_of_three_games=prob_of_three_games
-#                 )
-#             )
-#         )
-#     return sum(went_to_time) / len(went_to_time)
-
-
 def find_prob_of_going_to_time(
         num_rounds_to_simulate: int,
         num_matches_per_round: int,
