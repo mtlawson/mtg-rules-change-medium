@@ -1,6 +1,6 @@
 import numpy as np
-import pandas as pd
-from plotnine import *
+import pandas as pd 
+import plotnine as plt
 
 NUM_MATCHES_PER_ROUND = 85
 NUM_MATCHES_PER_ROUND_HUGE = 350
@@ -17,7 +17,9 @@ CASE_2_LOW_SHAPE_PARAM = 2
 CASE_2_HIGH_AVG_MINUTES_PER_GAME = 13.5
 CASE_2_HIGH_SD_MINUTES_PER_GAME = 2.5
 
-NUM_ROUNDS_TO_SIMULATE = 1000
+#NUM_ROUNDS_TO_SIMULATE = 10000
+
+AVERAGE_MINUTES_PER_GAME_VALUES = [12, 12.5, 13, 13.5, 14, 14.5, 15]
 
 prob_of_two_games_new = PROB_WIN_ON_PLAY * PROB_WIN_ON_PLAY + (1 - PROB_WIN_ON_PLAY) * PROB_WIN_ON_PLAY
 prob_of_three_games_new = 1 - prob_of_two_games_new
@@ -25,182 +27,174 @@ prob_of_two_games_old = PROB_WIN_ON_PLAY * (1 - PROB_WIN_ON_PLAY) + (1 - PROB_WI
 prob_of_three_games_old = 1 - prob_of_two_games_old
 
 
+def gen_num_games(prob: float):
+    """ Returns number of games in the round (either 2 or 3) """
+    return np.random.binomial(n=1, p=prob, size=1) + 2
+
+
+def gen_norm_dist_sum(avg: float, sd: float, size):
+    """ Generate sum of normal distribution """
+    return sum(np.random.normal(loc=avg, scale=sd, size=size))
+
+
+def gen_gamma_dist_sum(shape: float, scale: float):
+    """ Generate sum of gamma distribution """
+    return sum(np.random.gamma(shape=shape, scale=scale, size=2))
+
+
+def is_blowout(prob: float):
+    """ Returns True is round is blowout, False otherwise """
+    return bool(np.random.binomial(n=1, p=prob, size=1))
+
+
+def simulate_match(
+    mean_length: float, 
+    sd: float, 
+    prob_of_three_games: float, 
+    is_blowout: bool, 
+    gamma_shape: float, 
+    gamma_scale: float
+):
+    """ Simulate the length of a MTG match """
+
+    if is_blowout:
+        match_length = gen_gamma_dist_sum(shape=gamma_shape, scale=gamma_scale)
+    else:
+        num_games = gen_num_games(prob=prob_of_three_games)
+        match_length = gen_norm_dist_sum(mean_length, sd, num_games)
+
+    return match_length
+
+
 def simulate_match_lengths_in_round(
-        num_matches_per_round,
-        average_minutes_per_game,
-        sd_minutes_per_game,
-        prob_of_three_games=prob_of_three_games_new
+        num_matches_per_round: int,
+        average_minutes_per_game: float,
+        sd_minutes_per_game: float,
+        prob_of_three_games: float = prob_of_three_games_new,
+        prob_of_blowout: float = 0,
+        blowout_shape_parameter: float = 0,
+        blowout_scale_parameter: float = 0,
 ):
-    match_lengths = []
-    for i in range(num_matches_per_round):
-        match_lengths.append(
-            sum(
-                np.random.normal(
-                    loc=average_minutes_per_game,
-                    scale=sd_minutes_per_game,
-                    size=np.random.binomial(n=1, p=prob_of_three_games, size=1) + 2
-                )
-            )
-        )
+    """ Simulate match lengths for an entire tournament round """
+
+    match_lengths = [simulate_match(average_minutes_per_game, 
+                                    sd_minutes_per_game, 
+                                    prob_of_three_games,
+                                    is_blowout(prob_of_blowout),
+                                    blowout_shape_parameter,
+                                    blowout_scale_parameter) 
+                     for i in range(num_matches_per_round)]
+
     return match_lengths
 
 
-def simulate_match_lengths_in_round_with_blowouts(
-        num_matches_per_round,
-        prob_of_blowout,
-        blowout_shape_parameter,
-        blowout_scale_parameter,
-        normal_average_minutes_per_game,
-        normal_sd_minutes_per_game,
-        prob_of_three_games=prob_of_three_games_new
-):
-    match_lengths = []
-    for i in range(num_matches_per_round):
-        blowout_occurs = np.random.binomial(n=1, p=prob_of_blowout, size=1)
-        if blowout_occurs:
-            match_lengths.append(
-                sum(
-                    np.random.gamma(shape=blowout_shape_parameter,
-                                    scale=blowout_scale_parameter,
-                                    size=2)
-                )
-            )
-        else:
-            match_lengths.append(
-                sum(
-                    np.random.normal(loc=normal_average_minutes_per_game,
-                                     scale=normal_sd_minutes_per_game,
-                                     size=np.random.binomial(n=1, p=prob_of_three_games, size=1) + 2)
-                )
-            )
-    return match_lengths
-
-
-def does_round_go_to_time(match_lengths_in_round):
-    return sum(np.greater_equal(match_lengths_in_round, NUM_MINUTES_PER_ROUND)) > 0
+def does_round_go_to_time(match_lengths_in_round: list, round_time_limit_minutes=50):
+    """ 
+    Check all match lengths in the round. If any match exceeds the
+    maximum time for that round, then the round has gone to time
+    """
+    return sum(np.greater_equal(match_lengths_in_round, round_time_limit_minutes)) > 0
 
 
 def find_prob_of_going_to_time(
-        num_rounds_to_simulate,
-        num_matches_per_round,
-        average_minutes_per_game,
-        sd_minutes_per_game,
-        prob_of_three_games=prob_of_three_games_new
+        num_rounds_to_simulate: int,
+        num_matches_per_round: int,
+        average_minutes_per_game: float,
+        sd_minutes_per_game: float,
+        prob_of_three_games=prob_of_three_games_new,
+        prob_of_blowout: float = 0,
+        blowout_shape_parameter: float = 0,
+        blowout_scale_parameter: float = 0
 ):
-    went_to_time = []
-    for i in range(num_rounds_to_simulate):
-        went_to_time.append(
-            does_round_go_to_time(
+    """ 
+    Simulate many rounds of gameplay and record how 
+    many rounds go to time. The probability of a round
+    going to time is the count of rounds that went to time
+    divided by the total number of rounds simulated.
+    """
+        
+    went_to_time = [does_round_go_to_time(
                 simulate_match_lengths_in_round(
-                    num_matches_per_round=num_matches_per_round,
-                    average_minutes_per_game=average_minutes_per_game,
-                    sd_minutes_per_game=sd_minutes_per_game,
-                    prob_of_three_games=prob_of_three_games
-                )
-            )
-        )
-    return sum(went_to_time) / len(went_to_time)
-
-
-def find_prob_of_going_to_time_with_blowouts(
-        num_rounds_to_simulate,
-        num_matches_per_round,
-        prob_of_blowout,
-        blowout_shape_parameter,
-        blowout_scale_parameter,
-        normal_average_minutes_per_game,
-        normal_sd_minutes_per_game,
-        prob_of_three_games=prob_of_three_games_new
-):
-    went_to_time = []
-    for i in range(num_rounds_to_simulate):
-        went_to_time.append(
-            does_round_go_to_time(
-                simulate_match_lengths_in_round_with_blowouts(
                     num_matches_per_round=num_matches_per_round,
                     prob_of_blowout=prob_of_blowout,
                     blowout_shape_parameter=blowout_shape_parameter,
                     blowout_scale_parameter=blowout_scale_parameter,
-                    normal_average_minutes_per_game=normal_average_minutes_per_game,
-                    normal_sd_minutes_per_game=normal_sd_minutes_per_game,
+                    average_minutes_per_game=average_minutes_per_game,
+                    sd_minutes_per_game=sd_minutes_per_game,
                     prob_of_three_games=prob_of_three_games
                 )
-            )
-        )
+            ) for i in range(num_rounds_to_simulate)]
+
     return sum(went_to_time) / len(went_to_time)
 
 
-if __name__ == '__main__':
-    np.random.seed(23)
+def calc_go_to_time_probs(prob_of_three_games: float) -> list:
+    """
+    Simulate rounds and calculate go to time probabilities
+    based on probability of match going to 3 games
+    """
+    go_to_time_probs = [find_prob_of_going_to_time(
+            num_rounds_to_simulate=10000,
+            num_matches_per_round=NUM_MATCHES_PER_ROUND,
+            average_minutes_per_game=AVERAGE_MINUTES_PER_GAME_VALUES[i],
+            sd_minutes_per_game=CASE_1_SD_MINUTES_PER_GAME,
+            prob_of_three_games=prob_of_three_games)
+        for i in range(len(AVERAGE_MINUTES_PER_GAME_VALUES))]
 
-    # Density plot for match lengths, new rules, no blowouts, 85 matches/round
-    match_lengths_from_one_round = simulate_match_lengths_in_round(
-        num_matches_per_round=NUM_MATCHES_PER_ROUND,
-        average_minutes_per_game=CASE_1_AVG_MINUTES_PER_GAME,
-        sd_minutes_per_game=CASE_1_SD_MINUTES_PER_GAME
-    )
+    return go_to_time_probs
+
+
+def calc_go_to_time_probs_blowouts(prob_of_three_games: float) -> list:
+    """
+    Simulate rounds and calculate go to time probabilites
+    based on probability of match going to 3 games. Include the 
+    possibility of blowout matches
+    """
+    go_to_time_probs = [find_prob_of_going_to_time(
+            num_rounds_to_simulate=10000,
+            num_matches_per_round=NUM_MATCHES_PER_ROUND,
+            prob_of_blowout=CASE_2_BLOWOUT_PROB,
+            blowout_shape_parameter=CASE_2_LOW_SHAPE_PARAM,
+            blowout_scale_parameter=CASE_2_LOW_SCALE_PARAM,
+            average_minutes_per_game=AVERAGE_MINUTES_PER_GAME_VALUES[i],
+            sd_minutes_per_game=CASE_2_HIGH_SD_MINUTES_PER_GAME)
+        for i in range(len(AVERAGE_MINUTES_PER_GAME_VALUES))]
+
+    return go_to_time_probs
+
+
+def calc_go_to_time_probs_large(prob_of_three_games: float) -> list:
+    """
+    Simulate rounds and calculate go to time probabilites
+    based on probability of match going to 3 games. Round 
+    size is assumed to be large.
+    """
+    go_to_time_probs = [find_prob_of_going_to_time(
+                num_rounds_to_simulate=1000,
+                num_matches_per_round=300,
+                average_minutes_per_game=AVERAGE_MINUTES_PER_GAME_VALUES[i],
+                sd_minutes_per_game=CASE_1_SD_MINUTES_PER_GAME)
+        for i in range(len(AVERAGE_MINUTES_PER_GAME_VALUES))]
+
+    return go_to_time_probs
+
+
+def density_plot1(match_lengths_from_one_round: list):
+    """ Density plot for match lengths, new rules, no blowouts, 85 matches/round """
+
     match_lengths = pd.DataFrame({'Match length': match_lengths_from_one_round})
     (
-            ggplot(match_lengths, aes(x='Match length'))
-            + geom_density()
-            + geom_vline(xintercept=50, color='black', size=2)
-            + theme_classic()
-            + xlim([0, 55])
-    ).save(filename='match_length_density_plot')
+            plt.ggplot(match_lengths, plt.aes(x='Match length'))
+            + plt.geom_density()
+            + plt.geom_vline(xintercept=50, color='black', size=2)
+            + plt.theme_classic()
+            + plt.xlim([0, 55])
+    ).save(filename='figures/match_length_density_plot.png')
 
-    # Plot go-to-time probability, new vs. old rules, no blowouts, 85 matches/round
-    average_minutes_per_game_values = [12, 12.5, 13, 13.5, 14, 14.5, 15]
-    go_to_time_probs = []
-    go_to_time_probs_old = []
-    for i in range(len(average_minutes_per_game_values)):
-        go_to_time_probs.append(
-            find_prob_of_going_to_time(
-                num_rounds_to_simulate=10000,
-                num_matches_per_round=NUM_MATCHES_PER_ROUND,
-                average_minutes_per_game=average_minutes_per_game_values[i],
-                sd_minutes_per_game=CASE_1_SD_MINUTES_PER_GAME
-            )
-        )
-        go_to_time_probs_old.append(
-            find_prob_of_going_to_time(
-                num_rounds_to_simulate=10000,
-                num_matches_per_round=NUM_MATCHES_PER_ROUND,
-                average_minutes_per_game=average_minutes_per_game_values[i],
-                sd_minutes_per_game=CASE_1_SD_MINUTES_PER_GAME,
-                prob_of_three_games=prob_of_three_games_old
-            )
-        )
-    time_prob_data = pd.DataFrame({
-        'Average minutes per game': np.concatenate([
-            average_minutes_per_game_values,
-            average_minutes_per_game_values
-        ]),
-        'P(Go to time)': np.concatenate([
-            go_to_time_probs,
-            go_to_time_probs_old
-        ]),
-        'Rules': np.concatenate([
-            np.repeat('New', len(average_minutes_per_game_values)),
-            np.repeat('Old', len(average_minutes_per_game_values))
-        ])
-    })
-    (
-        ggplot(time_prob_data, aes(x='Average minutes per game', y='P(Go to time)', color='Rules'))
-        + geom_line()
-        + geom_point()
-        + ylim([0, 1])
-        + theme_classic()
-    ).save(filename='go_to_time_prob_plot.png')
 
-    # Density plot for match lengths, new rules, blowouts vs. no blowouts, 85 matches/round
-    match_lengths_from_one_round_with_blowouts = simulate_match_lengths_in_round_with_blowouts(
-        num_matches_per_round=NUM_MATCHES_PER_ROUND,
-        prob_of_blowout=CASE_2_BLOWOUT_PROB,
-        blowout_shape_parameter=CASE_2_LOW_SHAPE_PARAM,
-        blowout_scale_parameter=CASE_2_LOW_SCALE_PARAM,
-        normal_average_minutes_per_game=CASE_2_HIGH_AVG_MINUTES_PER_GAME,
-        normal_sd_minutes_per_game=CASE_2_HIGH_SD_MINUTES_PER_GAME
-    )
+def density_plot2(match_lengths_from_one_round: list, match_lengths_from_one_round_with_blowouts: list):
+    """ Density plot for match lengths, new rules, blowouts vs. no blowouts, 85 matches/round """
+
     match_lengths_blowout = pd.DataFrame({
         'Match length': np.concatenate([match_lengths_from_one_round, match_lengths_from_one_round_with_blowouts]),
         'Blowouts': np.concatenate([
@@ -209,108 +203,159 @@ if __name__ == '__main__':
         ])
     })
     (
-        ggplot(match_lengths_blowout, aes(x='Match length', color='Blowouts'))
-        + geom_density()
-        + geom_vline(xintercept=50, color='black', size=2)
-        + xlim([0, 55])
-        + theme_classic()
-    ).save(filename='match_length_with_blowout_density_plot.png')
+        plt.ggplot(match_lengths_blowout, plt.aes(x='Match length', color='Blowouts'))
+        + plt.geom_density()
+        + plt.geom_vline(xintercept=50, color='black', size=2)
+        + plt.xlim([0, 55])
+        + plt.theme_classic()
+    ).save(filename='figures/match_length_with_blowout_density_plot.png')
 
-    # Plot go-to-time probability, new vs. old rules, blowouts vs. no blowouts, 85 matches/round
-    go_to_time_blowout_probs = []
-    go_to_time_blowout_probs_old = []
-    for i in range(len(average_minutes_per_game_values)):
-        go_to_time_blowout_probs.append(
-            find_prob_of_going_to_time_with_blowouts(
-                num_rounds_to_simulate=10000,
-                num_matches_per_round=85,
-                prob_of_blowout=CASE_2_BLOWOUT_PROB,
-                blowout_shape_parameter=CASE_2_LOW_SHAPE_PARAM,
-                blowout_scale_parameter=CASE_2_LOW_SCALE_PARAM,
-                normal_average_minutes_per_game=average_minutes_per_game_values[i],
-                normal_sd_minutes_per_game=CASE_2_HIGH_SD_MINUTES_PER_GAME
-            )
-        )
-        go_to_time_blowout_probs_old.append(
-            find_prob_of_going_to_time_with_blowouts(
-                num_rounds_to_simulate=10000,
-                num_matches_per_round=85,
-                prob_of_blowout=CASE_2_BLOWOUT_PROB,
-                blowout_shape_parameter=CASE_2_LOW_SHAPE_PARAM,
-                blowout_scale_parameter=CASE_2_LOW_SCALE_PARAM,
-                normal_average_minutes_per_game=average_minutes_per_game_values[i],
-                normal_sd_minutes_per_game=CASE_2_HIGH_SD_MINUTES_PER_GAME,
-                prob_of_three_games=prob_of_three_games_old
-            )
-        )
-    time_prob_blowout_data = pd.DataFrame({
+
+def go_to_time_plot1(go_to_time_probs_new: list, go_to_time_probs_old: list):
+    """ Plot go-to-time probability, new vs. old rules, no blowouts, 85 matches/round """
+
+    time_prob_data = pd.DataFrame({
         'Average minutes per game': np.concatenate([
-            average_minutes_per_game_values,
-            average_minutes_per_game_values,
-            average_minutes_per_game_values,
-            average_minutes_per_game_values
+            AVERAGE_MINUTES_PER_GAME_VALUES,
+            AVERAGE_MINUTES_PER_GAME_VALUES
         ]),
         'P(Go to time)': np.concatenate([
-            go_to_time_probs,
+            go_to_time_probs_new,
+            go_to_time_probs_old
+        ]),
+        'Rules': np.concatenate([
+            np.repeat('New', len(AVERAGE_MINUTES_PER_GAME_VALUES)),
+            np.repeat('Old', len(AVERAGE_MINUTES_PER_GAME_VALUES))
+        ])
+    })
+    (
+        plt.ggplot(time_prob_data, plt.aes(x='Average minutes per game', y='P(Go to time)', color='Rules'))
+        + plt.geom_line()
+        + plt.geom_point()
+        + plt.ylim([0, 1])
+        + plt.theme_classic()
+    ).save(filename='figures/go_to_time_prob_plot.png')
+
+
+def go_to_time_plot2(go_to_time_probs_new: list, 
+          go_to_time_probs_old: list,
+          go_to_time_blowout_probs_new: list,
+          go_to_time_blowout_probs_old: list
+):
+    """ Plot go-to-time probability, new vs. old rules, blowouts vs. no blowouts, 85 matches/round """
+
+    time_prob_blowout_data = pd.DataFrame({
+        'Average minutes per game': np.concatenate([
+            AVERAGE_MINUTES_PER_GAME_VALUES,
+            AVERAGE_MINUTES_PER_GAME_VALUES,
+            AVERAGE_MINUTES_PER_GAME_VALUES,
+            AVERAGE_MINUTES_PER_GAME_VALUES
+        ]),
+        'P(Go to time)': np.concatenate([
+            go_to_time_probs_new,
             go_to_time_probs_old,
-            go_to_time_blowout_probs,
+            go_to_time_blowout_probs_new,
             go_to_time_blowout_probs_old
         ]),
         'Rules': np.concatenate([
-            np.repeat('New, no blowouts', len(average_minutes_per_game_values)),
-            np.repeat('Old, no blowouts', len(average_minutes_per_game_values)),
-            np.repeat('New, blowouts', len(average_minutes_per_game_values)),
-            np.repeat('Old, blowouts', len(average_minutes_per_game_values))
+            np.repeat('New, no blowouts', len(AVERAGE_MINUTES_PER_GAME_VALUES)),
+            np.repeat('Old, no blowouts', len(AVERAGE_MINUTES_PER_GAME_VALUES)),
+            np.repeat('New, blowouts', len(AVERAGE_MINUTES_PER_GAME_VALUES)),
+            np.repeat('Old, blowouts', len(AVERAGE_MINUTES_PER_GAME_VALUES))
         ])
     })
-    (
-        ggplot(time_prob_blowout_data, aes(x='Average minutes per game', y='P(Go to time)', color='Rules'))
-        + geom_line()
-        + geom_point()
-        + ylim([0, 1])
-        + theme_classic()
-    ).save(filename='go_to_time_prob_with_blowouts_plot.png')
 
-    # Plot go-to-time probability, old vs. new rules, no blowouts, 300 matches/round
-    average_minutes_per_game_values = [12, 12.5, 13, 13.5, 14, 14.5, 15]
-    large_go_to_time_probs = []
-    large_go_to_time_probs_old = []
-    for i in range(len(average_minutes_per_game_values)):
-        large_go_to_time_probs.append(
-            find_prob_of_going_to_time(
-                num_rounds_to_simulate=1000,
-                num_matches_per_round=300,
-                average_minutes_per_game=average_minutes_per_game_values[i],
-                sd_minutes_per_game=CASE_1_SD_MINUTES_PER_GAME
-            )
-        )
-        large_go_to_time_probs_old.append(
-            find_prob_of_going_to_time(
-                num_rounds_to_simulate=1000,
-                num_matches_per_round=300,
-                average_minutes_per_game=average_minutes_per_game_values[i],
-                sd_minutes_per_game=CASE_1_SD_MINUTES_PER_GAME,
-                prob_of_three_games=prob_of_three_games_old
-            )
-        )
+    (
+        plt.ggplot(time_prob_blowout_data, plt.aes(x='Average minutes per game', y='P(Go to time)', color='Rules'))
+        + plt.geom_line()
+        + plt.geom_point()
+        + plt.ylim([0, 1])
+        + plt.theme_classic()
+    ).save(filename='figures/go_to_time_prob_with_blowouts_plot.png')
+
+
+def go_to_time_plot3(large_go_to_time_probs_new: list, 
+                     large_go_to_time_probs_old: list
+):
+    """ Plot go-to-time probability, old vs. new rules, no blowouts, 300 matches/round """
+
     large_time_prob_data = pd.DataFrame({
         'Average minutes per game': np.concatenate([
-            average_minutes_per_game_values,
-            average_minutes_per_game_values
+            AVERAGE_MINUTES_PER_GAME_VALUES,
+            AVERAGE_MINUTES_PER_GAME_VALUES
         ]),
         'P(Go to time)': np.concatenate([
-            large_go_to_time_probs,
+            large_go_to_time_probs_new,
             large_go_to_time_probs_old
         ]),
         'Rules': np.concatenate([
-            np.repeat('New', len(average_minutes_per_game_values)),
-            np.repeat('Old', len(average_minutes_per_game_values))
+            np.repeat('New', len(AVERAGE_MINUTES_PER_GAME_VALUES)),
+            np.repeat('Old', len(AVERAGE_MINUTES_PER_GAME_VALUES))
         ])
     })
     (
-            ggplot(large_time_prob_data, aes(x='Average minutes per game', y='P(Go to time)', color='Rules'))
-            + geom_line()
-            + geom_point()
-            + ylim([0, 1])
-            + theme_classic()
-    ).save(filename='go_to_time_300_matches_prob_plot.png')
+            plt.ggplot(large_time_prob_data, plt.aes(x='Average minutes per game', y='P(Go to time)', color='Rules'))
+            + plt.geom_line()
+            + plt.geom_point()
+            + plt.ylim([0, 1])
+            + plt.theme_classic()
+    ).save(filename='figures/go_to_time_300_matches_prob_plot.png')
+
+
+def main():
+    """ Run all simualtions and generate figures """
+
+    np.random.seed(23)
+  
+    # Simulate match lengths for a single round - no blowouts
+    match_lengths_from_one_round = simulate_match_lengths_in_round(
+        num_matches_per_round=NUM_MATCHES_PER_ROUND,
+        average_minutes_per_game=CASE_1_AVG_MINUTES_PER_GAME,
+        sd_minutes_per_game=CASE_1_SD_MINUTES_PER_GAME
+    )
+
+    # Simulate match lengths for a single round - WITH blowouts
+    match_lengths_from_one_round_with_blowouts = simulate_match_lengths_in_round(
+        num_matches_per_round=NUM_MATCHES_PER_ROUND,
+        prob_of_blowout=CASE_2_BLOWOUT_PROB,
+        blowout_shape_parameter=CASE_2_LOW_SHAPE_PARAM,
+        blowout_scale_parameter=CASE_2_LOW_SCALE_PARAM,
+        average_minutes_per_game=CASE_2_HIGH_AVG_MINUTES_PER_GAME,
+        sd_minutes_per_game=CASE_2_HIGH_SD_MINUTES_PER_GAME
+    )
+
+    ### TODO
+    ### Consolidate calc_go_to_time prob functions into single function
+
+    # Simulate rounds to calculate probability of going to time
+    # for both new and old rule structure
+    go_to_time_probs_new = calc_go_to_time_probs(prob_of_three_games_new)
+    go_to_time_probs_old = calc_go_to_time_probs(prob_of_three_games_old)
+
+    # Simulate rounds to calculate probability of going to time
+    # for both new and old rule structure - including blowouts
+    go_to_time_blowout_probs_new = calc_go_to_time_probs_blowouts(prob_of_three_games_new)
+    go_to_time_blowout_probs_old = calc_go_to_time_probs_blowouts(prob_of_three_games_old)
+
+    # Simulate rounds to calculate probability of going to time
+    # for both new and old rule structure - large tournament
+    large_go_to_time_probs_new = calc_go_to_time_probs_large(prob_of_three_games_new)
+    large_go_to_time_probs_old = calc_go_to_time_probs_large(prob_of_three_games_old)
+
+    # Make all plots
+    density_plot1(match_lengths_from_one_round)
+
+    density_plot2(match_lengths_from_one_round, match_lengths_from_one_round_with_blowouts)
+
+    go_to_time_plot1(go_to_time_probs_new, go_to_time_probs_old)
+
+    go_to_time_plot2(go_to_time_probs_new, 
+          go_to_time_probs_old,
+          go_to_time_blowout_probs_new,
+          go_to_time_blowout_probs_old)
+
+    go_to_time_plot3(large_go_to_time_probs_new, large_go_to_time_probs_old)
+    
+
+if __name__ == '__main__':
+    main()
