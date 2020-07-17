@@ -20,7 +20,6 @@ CASE_2_HIGH_SD_MINUTES_PER_GAME = 2.5
 #NUM_ROUNDS_TO_SIMULATE = 10000
 
 AVERAGE_MINUTES_PER_GAME_VALUES = [12, 12.5, 13, 13.5, 14, 14.5, 15]
-AVERAGE_MINUTES_PER_GAME_VALUES = [12, 12.5, 13, 13.5, 14, 14.5, 15]
 
 prob_of_two_games_new = PROB_WIN_ON_PLAY * PROB_WIN_ON_PLAY + (1 - PROB_WIN_ON_PLAY) * PROB_WIN_ON_PLAY
 prob_of_three_games_new = 1 - prob_of_two_games_new
@@ -89,8 +88,12 @@ def simulate_match_lengths_in_round(
     return match_lengths
 
 
-def does_round_go_to_time(match_lengths_in_round: list):
-    return sum(np.greater_equal(match_lengths_in_round, NUM_MINUTES_PER_ROUND)) > 0
+def does_round_go_to_time(match_lengths_in_round: list, round_time_limit_minutes=50):
+    """ 
+    Check all match lengths in the round. If any match exceeds the
+    maximum time for that round, then the round has gone to time
+    """
+    return sum(np.greater_equal(match_lengths_in_round, round_time_limit_minutes)) > 0
 
 
 def find_prob_of_going_to_time(
@@ -105,7 +108,9 @@ def find_prob_of_going_to_time(
 ):
     """ 
     Simulate many rounds of gameplay and record how 
-    many rounds go to time 
+    many rounds go to time. The probability of a round
+    going to time is the count of rounds that went to time
+    divided by the total number of rounds simulated.
     """
         
     went_to_time = [does_round_go_to_time(
@@ -318,6 +323,9 @@ def main():
         average_minutes_per_game=CASE_2_HIGH_AVG_MINUTES_PER_GAME,
         sd_minutes_per_game=CASE_2_HIGH_SD_MINUTES_PER_GAME
     )
+
+    ### TODO
+    ### Consolidate calc_go_to_time prob functions into single function
 
     # Simulate rounds to calculate probability of going to time
     # for both new and old rule structure
